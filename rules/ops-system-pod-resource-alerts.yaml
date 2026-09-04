@@ -1,0 +1,74 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ops-system-pod-resource-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring-stack
+    role: alert-rules
+spec:
+  groups:
+    - name: ops-system.pod-resource-usage
+      rules:
+        - alert: OpsSystemPodCPUUsageHigh
+          expr: |
+            (
+              sum by (namespace, pod) (
+                rate(container_cpu_usage_seconds_total{
+                  namespace="ops-system",
+                  container!="",
+                  container!="POD"
+                }[1m])
+              )
+              /
+              sum by (namespace, pod) (
+                kube_pod_container_resource_limits{
+                  namespace="ops-system",
+                  resource="cpu",
+                  unit="core"
+                } > 0
+              )
+            ) * 100 > 80
+          for: 1m
+          labels:
+            severity: warning
+            team: ops
+          annotations:
+            summary: "ops-system Pod CPU 使用率过高"
+            description: >-
+              Pod {{ $labels.namespace }}/{{ $labels.pod }} 的 CPU 使用率已达到
+              {{ printf "%.1f" $value }}%，连续 1 分钟超过 limit 的 80%。
+            dashboard_url: >-
+              http://localhost:3000/d/6581e46e4e5c7ba40a07646395ef7b23/kubernetes-compute-resources-pod?orgId=1&var-namespace={{ $labels.namespace }}&var-pod={{ $labels.pod }}
+
+        - alert: OpsSystemPodMemoryUsageHigh
+          expr: |
+            (
+              sum by (namespace, pod) (
+                container_memory_working_set_bytes{
+                  namespace="ops-system",
+                  container!="",
+                  container!="POD"
+                }
+              )
+              /
+              sum by (namespace, pod) (
+                kube_pod_container_resource_limits{
+                  namespace="ops-system",
+                  resource="memory",
+                  unit="byte"
+                } > 0
+              )
+            ) * 100 > 85
+          for: 1m
+          labels:
+            severity: warning
+            team: ops
+          annotations:
+            summary: "ops-system Pod 内存使用率过高"
+            description: >-
+              Pod {{ $labels.namespace }}/{{ $labels.pod }} 的内存 working set 已达到
+              {{ printf "%.1f" $value }}%，连续 1 分钟超过 limit 的 85%。
+            runbook_url: "https://www.google.com"
+            dashboard_url: >-
+              http://localhost:3000/d/6581e46e4e5c7ba40a07646395ef7b23/kubernetes-compute-resources-pod?orgId=1&var-namespace={{ $labels.namespace }}&var-pod={{ $labels.pod }}

@@ -1,0 +1,74 @@
+# prometheus-pushgateway chart 3.8.0 / Pushgateway v1.11.3
+# Target: Docker Desktop Kubernetes arm64, namespace monitoring
+
+fullnameOverride: prometheus-pushgateway
+replicaCount: 1
+
+automountServiceAccountToken: false
+
+serviceAccount:
+  create: true
+
+service:
+  type: ClusterIP
+  port: 9091
+  targetPort: 9091
+  portName: http
+
+# Preserve pushed batch-job metrics across a pod recreation. Pushgateway does
+# not synchronize data between replicas, so keep this deployment single-replica.
+runAsStatefulSet: false
+strategy:
+  type: Recreate
+
+persistentVolume:
+  enabled: true
+  storageClass: standard
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  mountPath: /data
+
+extraArgs:
+  - --persistence.file=/data/pushgateway.db
+  - --persistence.interval=5m
+
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  telemetryPath: /metrics
+  interval: 30s
+  scrapeTimeout: 10s
+  honorLabels: true
+  additionalLabels:
+    release: monitoring-stack
+    role: service-monitor
+
+securityContext:
+  fsGroup: 65534
+  runAsUser: 65534
+  runAsNonRoot: true
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsUser: 65534
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+ingress:
+  enabled: false
+
+# Business namespaces need to push metrics to this service, so no restrictive
+# NetworkPolicy is enabled at this stage.
+networkPolicy: {}

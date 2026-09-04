@@ -1,0 +1,205 @@
+# kube-prometheus-stack 88.6.1
+# Target: Docker Desktop Kubernetes v1.36.1, 1 control-plane + 2 workers (arm64)
+# Install namespace: monitoring
+
+# Keep the standard Kubernetes and node alert rules/dashboards enabled.
+defaultRules:
+  create: true
+
+# Docker Desktop starts these control-plane components with loopback-only
+# metrics endpoints. Disabling their ServiceMonitors avoids permanent
+# TargetDown alerts. kube-proxy also has no externally reachable metrics
+# bind address in this cluster.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+prometheus:
+  enabled: true
+  service:
+    type: ClusterIP
+  prometheusSpec:
+    # Public/client-facing base URL. Keep UI paths such as /query out of this
+    # value because Prometheus appends the alert expression path itself.
+    externalUrl: http://localhost:9090
+    replicas: 1
+    shards: 1
+    retention: 7d
+    retentionSize: 12GB
+    walCompression: true
+
+    # Discover custom PrometheusRule, ServiceMonitor, PodMonitor, Probe and
+    # ScrapeConfig resources from every namespace without requiring the Helm
+    # release label.
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+    probeSelectorNilUsesHelmValues: false
+    probeSelector: {}
+    probeNamespaceSelector: {}
+    scrapeConfigSelectorNilUsesHelmValues: false
+    scrapeConfigSelector: {}
+    scrapeConfigNamespaceSelector: {}
+
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 15Gi
+
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
+
+alertmanager:
+  enabled: true
+
+  config:
+    global:
+      resolve_timeout: 5m
+
+    route:
+      receiver: lark-webhook
+      group_by:
+        - namespace
+        - alertname
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 10m
+      routes:
+        # Watchdog 是持续触发的健康检查告警，不发送外部通知。
+        - receiver: "null"
+          matchers:
+            - alertname = "Watchdog"
+
+        # 平台托管告警交给 ops-webhook；未匹配的告警仍使用 lark-webhook。
+        - receiver: ops-platform-webhook
+          matchers:
+            - 'ops_platform_managed="true"'
+          continue: false
+
+    receivers:
+      - name: "null"
+
+      - name: lark-webhook
+        webhook_configs:
+          # The adapter converts Alertmanager JSON into the Lark bot format.
+          - url: "http://lark-alertmanager-adapter.monitoring.svc.cluster.local:8080/webhook?webhook_url=https%3A%2F%2Fopen.larksuite.com%2Fopen-apis%2Fbot%2Fv2%2Fhook%2F31f1df5c-a762-4df5-83f5-a1408c98546d"
+            send_resolved: true
+      - name: ops-platform-webhook
+        webhook_configs:
+          - url: http://host.docker.internal:18080/api/v1/alertmanager/webhook
+            send_resolved: true
+            http_config:
+              authorization:
+                type: Bearer
+                credentials: "am_ecd200f33bf2c9f0f281af29f86bbe77e0cfd2c4dfbe917f81b762650c12e445"
+
+  service:
+    type: ClusterIP
+  alertmanagerSpec:
+    # Public/client-facing base URL. The Lark adapter links this to /#/alerts.
+    externalUrl: http://localhost:9093
+    replicas: 1
+    retention: 120h
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
+
+grafana:
+  enabled: true
+  adminUser: admin
+  # Intentionally omit adminPassword. The chart generates it in a Secret;
+  # retrieve it after installation instead of storing plaintext in this file.
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: Asia/Shanghai
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: true
+    type: sts
+    storageClassName: standard
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
