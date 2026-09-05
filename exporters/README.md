@@ -1,10 +1,10 @@
 # Optional Prometheus exporters
 
-These files prepare two optional components for the existing
-`monitoring-stack` installation. Nothing in this directory is installed merely
-by creating these files.
+These files configure two optional components installed alongside the existing
+`monitoring-stack` release. Editing values files does not modify the cluster;
+run the corresponding Helm command to apply changes.
 
-## Prepared releases
+## Releases
 
 | Release | Chart | Application | Purpose |
 |---|---:|---:|---|
@@ -17,7 +17,7 @@ objects across all namespaces and labels.
 
 ## Pushgateway behavior
 
-The internal push endpoint will be:
+The internal push endpoint is:
 
 ```text
 http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
@@ -41,7 +41,7 @@ HTTP and TCP modules are prepared. ICMP is intentionally disabled because it
 requires the `NET_RAW` capability. A `BlackboxProbeFailed` critical alert fires
 after one minute of failed probes.
 
-## Planned commands (not executed)
+## Install or upgrade
 
 ```bash
 helm upgrade --install prometheus-pushgateway \
@@ -63,8 +63,8 @@ helm upgrade --install prometheus-blackbox-exporter \
   --timeout 10m
 ```
 
-Before installation, render both charts locally and review the generated
-resources. After installation, verify the new ServiceMonitor targets and send
+Before applying changes, render both charts locally and review the generated
+resources. Afterwards, verify the ServiceMonitor targets and optionally send
 one disposable Pushgateway metric group through a Kubernetes Job.
 
 ## Other related components
@@ -78,4 +78,3 @@ one disposable Pushgateway metric group through a Kubernetes Job.
   long retention; unnecessary for this single local cluster at present.
 - OpenTelemetry Collector: useful when applications emit OTLP metrics, traces,
   or logs; it is complementary rather than a required Prometheus component.
-
